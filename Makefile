@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Makefile for Difference-of-Gaussians project
 # - Builds all .cpp files in the project directory
 # - Targets: `all` (default), `release`, `debug`, `run`, `clean`
@@ -44,3 +45,19 @@ cuda:
 	$(NVCC) -O3 -std=c++11 -o cuda_build $(CUDA_SRCS)
 endif
 
+=======
+CC= g++
+CUDA = nvccx
+# CObj = main.cpp
+CFLAGS = -Wall
+
+make: main-make
+	
+make-main:
+	$(CC) $(CFLAGS) main.cpp -o main 
+
+clean: clean-main
+
+clean-main:
+	rm -rf main
+>>>>>>> 5797214dde0b011777a13496339ecfb4e65dbe70
