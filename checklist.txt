@@ -1,0 +1,24 @@
+make flags:
+    - cpu vs gpu
+    - input loc/name
+    - output loc
+    - shader
+
+steps:
+    - input image
+    - preprocess it if only b/w
+    - gausian convolution
+    - difference    (dog)
+    - thresholding  (t-dog)
+    - tonemaping    (x-dog)
+    - tiling (Hatching) 
+    - cuda implementation
+    - colouring
+    - finding values for different shaders
+
+
+Shaders:
+    - DoG
+    - T-DoG
+    - XDoG
+    - Hatching
