@@ -12,11 +12,11 @@ void printUsage(const std::string& programName) {
 }
 
 void getUserInput(int argc, char* argv[], std::string* flags) {
-    if (argc < 2) {
+    if (argc < 2) { 
         std::cerr << "Error: No input provided.\n";
         printUsage(argv[0]);
         exit(-1);
-    }
+    } 
     
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
