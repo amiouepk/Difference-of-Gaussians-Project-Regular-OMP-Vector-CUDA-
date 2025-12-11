@@ -10,11 +10,16 @@ class FileManager {
     unsigned char* image_data;
     std::string file_type;
     bool valid;
-    int 
+    bool is_image;
+    size_t data_size;
+
+    int width;
+    int height;
+    int channels;
     
     public:
     FileManager(const std::string& filepath, const std::string& type);
-    FileManager(const unsigned char* image_data);
+    FileManager(const unsigned char* image_data, int width, int height, int channels);
     ~FileManager();
 
     std::vector<unsigned char> getTextData() const;
@@ -23,6 +28,12 @@ class FileManager {
     bool saveImage(const std::string& filepath) const;
 
     bool isValid() const;
+    bool isImage() const;
+    size_t getDataSize() const;
+    int getWidth() const;
+    int getHeight() const;
+    int getChannels() const;
+    
 
 };
 
