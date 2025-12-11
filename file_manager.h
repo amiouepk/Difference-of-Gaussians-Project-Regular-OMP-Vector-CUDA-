@@ -9,6 +9,7 @@ class FileManager {
     unsigned char* text_data;
     unsigned char* image_data;
     std::string file_type;
+    std::string filename;
     bool valid;
     bool is_image;
     size_t data_size;
@@ -25,6 +26,7 @@ class FileManager {
     std::vector<unsigned char> getTextData() const;
     std::vector<unsigned char> getImageData() const;
 
+    bool toBWImage();
     bool saveImage(const std::string& filepath) const;
 
     bool isValid() const;
@@ -33,6 +35,7 @@ class FileManager {
     int getWidth() const;
     int getHeight() const;
     int getChannels() const;
+    std::string getFilename() const;
     
 
 };

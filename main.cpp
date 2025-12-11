@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include "file_manager.h"
 
 void printUsage(const std::string& programName) {
     std::cout   << "Usage: " << programName << " [options]\n"
@@ -65,6 +66,30 @@ int main(int argc, char* argv[]) {
     std::string flags[7] = { "0", "0", "", "0", "", "0", "" };
     getUserInput( argc, argv, flags);
 
+    // Testing file manager
+    FileManager inputImage(flags[2], "image");
+    if (!inputImage.isValid()) {
+        std::cerr << "Error: Failed to load input image.\n";
+        return -1;
+    }
+    std::cout << "Loaded image: " << flags[2] << " (" 
+              << inputImage.getWidth() << "x" << inputImage.getHeight() 
+              << ", " << inputImage.getChannels() << " channels)\n";
+    
+    // Convert to black and white
+    printf("Converting image to black and white...\n");
+    if (!inputImage.toBWImage()) {
+        std::cerr << "Error: Failed to convert image to black and white.\n";
+        return -1;
+    }
+    std::cout << "Conversion to black and white successful.\n";
+    std::cout << "New image channels: " << inputImage.getChannels() << "\n";
+    std::cout << "Saving output image to: " << flags[4] + inputImage.getFilename()<< "\n";
+    // Save output image
+    if (!inputImage.saveImage(flags[4])) {
+        std::cerr << "Error: Failed to save output image to " << flags[4] << "\n";
+        return -1;
+    }
 
 
     return 0;
