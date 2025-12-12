@@ -28,6 +28,8 @@ Image GaussianBlur(const Image& input, float sigma);
 
 Image applyDoG(const Image& input, float sigma, float k, float tau);
 
+Image applyXDoG(const Image& input, float sigma, float k, float tau, float epsilon, float phi);
+
 Image convertToFloatImage(const FileManager& fm);
 
 FileManager convertToFMImage(const Image& img);

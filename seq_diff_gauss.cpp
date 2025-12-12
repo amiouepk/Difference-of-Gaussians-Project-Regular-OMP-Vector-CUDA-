@@ -103,6 +103,40 @@ Image applyDoG(const Image& input, float sigma, float k, float tau) {
     return output;
 }
 
+Image applyXDoG(const Image& input, float sigma, float k, float tau, float epsilon, float phi) {
+    
+    float sigma1 = sigma;
+    float sigma2 = k * sigma;
+
+    Image g1 = GaussianBlur(input, sigma1);
+    Image g2 = GaussianBlur(input, sigma2);
+
+    Image output(input.width, input.height);
+
+    for (size_t i = 0; i < input.data.size(); ++i) {
+
+        float D = g1.data[i] - (tau * g2.data[i]);
+
+
+        float val = D / 255.0f; 
+
+        float result;
+        
+        if (val < epsilon) {
+            
+            result = 1.0f;
+        } 
+        else {
+            
+            result = 1.0f + std::tanh(phi * (val - epsilon));
+        }
+
+        // 4. Scale back up to 0-255
+        output.data[i] = result * 255.0f;
+    }
+
+    return output;
+}
 
 
 Image convertToFloatImage(const FileManager& fm) {
