@@ -8,6 +8,7 @@
 #include <iostream>
 #include <fstream>
 #include <webp/encode.h>
+#include "file_manager.h"
 
 struct Image {
     int width;
@@ -27,6 +28,9 @@ Image GaussianBlur(const Image& input, float sigma);
 
 Image applyDoG(const Image& input, float sigma, float k, float tau);
 
+Image convertToFloatImage(const FileManager& fm);
+
+FileManager convertToFMImage(const Image& img);
 
 
 #endif

@@ -1,6 +1,10 @@
 #include <iostream>
 #include <string>
+#include <sstream>
+#include <fstream>
+
 #include "file_manager.h"
+#include "seq_diff_gauss.hpp"
 
 void printUsage(const std::string& programName) {
     std::cout   << "Usage: " << programName << " [options]\n"
@@ -50,6 +54,36 @@ void getUserInput(int argc, char* argv[], std::string* flags) {
     }
 }
 
+std::vector<std::vector<int>> load2DArray(const std::string& filename) {
+    std::vector<std::vector<int>> grid;
+    std::ifstream file(filename);
+
+    if (!file.is_open()) {
+        std::cerr << "Error opening file!" << std::endl;
+        return grid;
+    }
+
+    std::string line;
+    // 1. Read line by line
+    while (std::getline(file, line)) {
+        std::vector<int> row;
+        std::stringstream ss(line);
+        int value;
+
+        // 2. Read number by number from that line
+        while (ss >> value) {
+            row.push_back(value);
+        }
+
+        // Only add non-empty rows
+        if (!row.empty()) {
+            grid.push_back(row);
+        }
+    }
+
+    return grid;
+}
+
 int main(int argc, char* argv[]) {
     std::string programName = argv[0];
 
@@ -65,6 +99,7 @@ int main(int argc, char* argv[]) {
     // Get user input
     std::string flags[7] = { "0", "0", "", "0", "", "0", "" };
     getUserInput( argc, argv, flags);
+
 
     // Testing file manager
     FileManager inputImage(flags[2], "image");
@@ -82,15 +117,27 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error: Failed to convert image to black and white.\n";
         return -1;
     }
-    std::cout << "Conversion to black and white successful.\n";
-    std::cout << "New image channels: " << inputImage.getChannels() << "\n";
-    std::cout << "Saving output image to: " << flags[4] + inputImage.getFilename()<< "\n";
+
+    // Convert to float image
+    Image floatImage = convertToFloatImage(inputImage);
+
+    // Apply Gaussian blur
+    // Image blurred = GaussianBlur(floatImage, 10.0f);
+
+    // Apply DoG
+
+
+    Image dog = applyDoG(floatImage, 10.4f, 2.6f, 0.5f);
+
+
     // Save output image
-    if (!inputImage.saveImage(flags[4])) {
+    FileManager outputImage = convertToFMImage(dog);
+    outputImage.setFilename("dog_" + inputImage.getFilename());
+
+    if (!outputImage.saveImage(flags[4])) {
         std::cerr << "Error: Failed to save output image to " << flags[4] << "\n";
         return -1;
     }
-
 
     return 0;
 }

@@ -130,7 +130,8 @@ Image convertToFloatImage(const FileManager& fm) {
     return img;
 }
 
-std::vector<unsigned char> convertToBytes(const Image& img) {
+FileManager convertToFMImage(const Image& img) {
+    
     std::vector<unsigned char> bytes(img.width * img.height);
     
     for (size_t i = 0; i < img.data.size(); ++i) {
@@ -143,7 +144,5 @@ std::vector<unsigned char> convertToBytes(const Image& img) {
         bytes[i] = static_cast<unsigned char>(val);
     }
 
-    return bytes;
+    return FileManager(bytes.data(), img.width, img.height, 1);
 }
-
-

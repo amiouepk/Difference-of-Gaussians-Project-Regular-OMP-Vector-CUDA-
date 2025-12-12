@@ -75,6 +75,7 @@ FileManager::FileManager(const unsigned char* input_data, int w, int h, int c) {
     is_image = true;
     file_type = "image";
     data_size = width * height * channels;
+    filename = "";
 
     // DEEP COPY: Allocate new memory and copy the input data into it.
     // We use malloc here because stbi_image_free (in destructor) expects malloc'd memory.
@@ -133,6 +134,10 @@ std::string FileManager::getFilename() const {
     return filename;
 }
 
+void FileManager::setFilename(const std::string& new_filename) {
+    filename = new_filename;
+}
+
 std::vector<unsigned char> FileManager::getTextData() const {
     if (!is_image && text_data != nullptr && data_size > 0) {
         return std::vector<unsigned char>(text_data, text_data + data_size);
@@ -152,11 +157,11 @@ bool FileManager::saveImage(const std::string& filepath) const {
 
     // stbi_write_png(filename, w, h, comp, data, stride_in_bytes)
     // stride_in_bytes is usually width * channels
-
+    
     std::string full_path = filepath + filename;
 
     int result = stbi_write_png(full_path.c_str(), width, height, channels, image_data, width * channels);
-    
+
     return (result != 0);
 }
 

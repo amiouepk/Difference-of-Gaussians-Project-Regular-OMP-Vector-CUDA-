@@ -36,6 +36,7 @@ class FileManager {
     int getHeight() const;
     int getChannels() const;
     std::string getFilename() const;
+    void setFilename(const std::string& new_filename);
     
 
 };
