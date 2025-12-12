@@ -5,6 +5,7 @@
 
 #include "file_manager.h"
 #include "seq_diff_gauss.hpp"
+#include <omp.h> 
 
 void printUsage(const std::string& programName) {
     std::cout   << "Usage: " << programName << " [options]\n"
@@ -125,14 +126,65 @@ int main(int argc, char* argv[]) {
     // Image blurred = GaussianBlur(floatImage, 10.0f);
 
     // Apply DoG
+    // 1. Include OpenMP header
 
 
-    Image dog = applyDoG(floatImage, 10.4f, 2.6f, 0.5f);
+// ... inside your function ...
+
+// 2. Use 'parallel for' with 'collapse(3)'
+// 'collapse(3)' flattens the 3 nested loops into one giant task list
+// so OpenMP can distribute the work evenly across all cores.
+
+/*
+    #pragma omp parallel for collapse(3)
+    for(int s = 1; s <= 1; ++s) {
+        for(int k_step = 0; k_step <= 20; ++k_step) { // 0 to 6 covers 1.0 to 4.0 in 0.5 steps
+            for(int t_step = 10; t_step <= 10; ++t_step) { // 1 to 20 covers 0.1 to 2.0
+            
+                // 3. Convert Integers back to Floats locally
+                float sigma = (float)s;
+                float k = 1.0f + (k_step * 0.5f);
+                float tau = t_step * 0.1f;
+
+                // 4. Your existing logic (Private to each thread automatically)
+                // 'dog' and 'outputImage' are declared INSIDE the loop, 
+                // so every thread gets its own safe copy.
+                Image dog = applyDoG(floatImage, sigma, k, tau);
+                
+                FileManager outputImage = convertToFMImage(dog);
+                
+                // Construct filename
+                std::string filename = "Xdog_" +
+                                        std::to_string(sigma) + "_" + 
+                                        std::to_string(k) + "_" + 
+                                        std::to_string(tau) + "_" + 
+                                        inputImage.getFilename();
+                
+                // Note: outputImage.setFilename is hypothetical based on your code context
+                // outputImage.setFilename(filename); 
+
+                // 5. Critical Section for I/O (Optional but Safer)
+                // File writing is slow and usually serialized by the OS anyway.
+                // If you see garbled error messages, wrap std::cerr in a critical block.
+                if (!outputImage.saveImage(flags[4] + "/" + filename)) {
+                    #pragma omp critical
+                    {
+                        std::cerr << "Error: Failed to save output image to " << flags[4] << "\n";
+                    }
+                }
+            }
+        }
+    }
+    */
 
 
-    // Save output image
+
+    Image dog = applyDoG(floatImage, 1.0f, 70.6f, 0.9f);
+
+
+    // // Save output image
     FileManager outputImage = convertToFMImage(dog);
-    outputImage.setFilename("dog_" + inputImage.getFilename());
+    outputImage.setFilename("Xdog_" + inputImage.getFilename());
 
     if (!outputImage.saveImage(flags[4])) {
         std::cerr << "Error: Failed to save output image to " << flags[4] << "\n";

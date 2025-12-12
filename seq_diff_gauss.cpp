@@ -98,6 +98,8 @@ Image applyDoG(const Image& input, float sigma, float k, float tau) {
     for (size_t i = 0; i < input.data.size(); ++i) {
         //G1 - tau * G2
         output.data[i] = g1.data[i] - (tau * g2.data[i]);
+        // Xdog
+        output.data[i] = (1-tau) *g1.data[i] + tau * output.data[i];
     }
     
     return output;
