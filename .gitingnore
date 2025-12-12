@@ -1,3 +1,3 @@
 diff_gauss file_manager.o main.o omp_diff_gauss.o seq_diff_gauss.o vec_diff_gauss.o
 
-Input
+Input/
