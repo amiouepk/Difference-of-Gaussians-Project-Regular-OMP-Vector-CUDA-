@@ -1,105 +1,128 @@
 #include "seq_diff_gauss.hpp"
-#include "file_manager.h"
 #include <iostream>
 #include <algorithm>
+#include <cmath>
+#include <vector>
 
 std::vector<float> create1dGaussianKernel(float sigma) {
+    
     int radius = std::ceil(3.0f * sigma);
     int size = 2 * radius + 1;
     std::vector<float> kernel(size);
     
+    float sigma2 = 2.0f * sigma * sigma;
     float sum = 0.0f;
+    
     for (int i = 0; i < size; ++i) {
         int x = i - radius; 
-        kernel[i] = std::exp(-(x * x) / (2.0f * sigma * sigma));
+        kernel[i] = std::exp(-(x * x) / sigma2);
         sum += kernel[i];
     }
     
-    // Normalize
+    float invSum = 1.0f / sum;
+
     for (float &val : kernel) {
-        val /= sum;
+        val *= invSum;
     }
     return kernel;
 }
 
 void convolve_x(const Image& input, Image& output, const std::vector<float>& kernel) {
+    
     int radius = kernel.size() / 2;
-    for (int y = 0; y < input.height; ++y) {
-        
-        for (int x = 0; x < input.width; ++x) {
+    int w = input.width;
+    int h = input.height;
+    int kSize = kernel.size();
 
+    const float* inData = input.data.data();
+    float* outData = output.data.data();
+
+    for (int y = 0; y < h; ++y) {
+        int rowOffset = y * w;
+        for (int x = 0; x < w; ++x) {
             float sum = 0.0f;
-
-            for (size_t k = 0; k < kernel.size(); ++k) {
-                int offset = k - radius;
-                int nx = x + offset;
-                
-                if (nx < 0) nx = 0;
-
-                if (nx >= input.width) nx = input.width - 1;
-                
-                sum += input.data[y * input.width + nx] * kernel[k];
+            
+            for (int k = 0; k < kSize; ++k) {
+                int nx = std::clamp(x + k - radius, 0, w - 1);
+                sum += inData[rowOffset + nx] * kernel[k];
             }
-            output.data[y * input.width + x] = sum;
+            outData[rowOffset + x] = sum;
         }
     }
 }
 
+
 void convolve_y(const Image& input, Image& output, const std::vector<float>& kernel) {
-    
-    int radius = kernel.size() / 2;
+    int w = input.width;
+    int h = input.height;
+    int kSize = kernel.size();
+    int radius = kSize / 2;
 
-    for (int y = 0; y < input.height; ++y) {
+    std::fill(output.data.begin(), output.data.end(), 0.0f);
 
-        for (int x = 0; x < input.width; ++x) {
+    const float* inData = input.data.data();
+    float* outData = output.data.data();
 
-            float sum = 0.0f;
+    for (int y = 0; y < h; ++y) {
+        
+        float* destRow = &outData[y * w];
 
-            for (size_t k = 0; k < kernel.size(); ++k) {
+        for (int k = 0; k < kSize; ++k) {
+            
+            int ny = std::clamp(y + k - radius, 0, h - 1);
+            float weight = kernel[k];
+            
+            const float* srcRow = &inData[ny * w];
 
-                int offset = k - radius;
-                int ny = y + offset;
-
-                if (ny < 0) ny = 0;
-
-                if (ny >= input.height) ny = input.height - 1;
+            
+            for (int x = 0; x < w; ++x) {
                 
-                sum += input.data[ny * input.width + x] * kernel[k];
+                destRow[x] += srcRow[x] * weight;
             }
-
-            output.data[y * input.width + x] = sum;
         }
     }
+}
+
+void GaussianBlurRaw(const Image& input, Image& output, Image& tempBuffer, float sigma) {
+    
+    if (tempBuffer.width != input.width || tempBuffer.height != input.height) 
+        tempBuffer.resize(input.width, input.height);
+    
+    if (output.width != input.width || output.height != input.height) 
+        output.resize(input.width, input.height);
+
+    std::vector<float> kernel = create1dGaussianKernel(sigma);
+
+    convolve_x(input, tempBuffer, kernel);
+    convolve_y(tempBuffer, output, kernel);
 }
 
 Image GaussianBlur(const Image& input, float sigma) {
     
-    std::vector<float> kernel = create1dGaussianKernel(sigma);
     Image temp(input.width, input.height);
     Image output(input.width, input.height);
-    
-    convolve_x(input, temp, kernel);
-    convolve_y(temp, output, kernel);
-    
+    GaussianBlurRaw(input, output, temp, sigma);
     return output;
 }
 
 Image applyDoG(const Image& input, float sigma, float k, float tau) {
     
-    float sigma1 = sigma;
-    float sigma2 = k * sigma;
-    
-    Image g1 = GaussianBlur(input, sigma1);
-    
-    Image g2 = GaussianBlur(input, sigma2);
-    
+    Image g1(input.width, input.height);
+    Image g2(input.width, input.height);
+    Image temp(input.width, input.height); 
+
+    GaussianBlurRaw(input, g1, temp, sigma);
+    GaussianBlurRaw(input, g2, temp, sigma * k);
+
     Image output(input.width, input.height);
+    size_t size = input.data.size();
     
-    for (size_t i = 0; i < input.data.size(); ++i) {
-        //G1 - tau * G2
-        output.data[i] = g1.data[i] - (tau * g2.data[i]);
-        // Xdog
-        output.data[i] = (1-tau) *g1.data[i] + tau * output.data[i];
+    const float* pG1 = g1.data.data();
+    const float* pG2 = g2.data.data();
+    float* pOut = output.data.data();
+
+    for (size_t i = 0; i < size; ++i) {
+        pOut[i] = pG1[i] - (tau * pG2[i]);
     }
     
     return output;
@@ -107,40 +130,36 @@ Image applyDoG(const Image& input, float sigma, float k, float tau) {
 
 Image applyXDoG(const Image& input, float sigma, float k, float tau, float epsilon, float phi) {
     
-    float sigma1 = sigma;
-    float sigma2 = k * sigma;
+    Image g1(input.width, input.height);
+    Image g2(input.width, input.height);
+    Image temp(input.width, input.height); 
 
-    Image g1 = GaussianBlur(input, sigma1);
-    Image g2 = GaussianBlur(input, sigma2);
+    GaussianBlurRaw(input, g1, temp, sigma);
+    GaussianBlurRaw(input, g2, temp, sigma * k);
 
     Image output(input.width, input.height);
+    size_t size = input.data.size();
 
-    for (size_t i = 0; i < input.data.size(); ++i) {
+    const float* pG1 = g1.data.data();
+    const float* pG2 = g2.data.data();
+    float* pOut = output.data.data();
 
-        float D = g1.data[i] - (tau * g2.data[i]);
-        // D = (1 - tau)*g1.data[i] + tau*D;
-
-        // float val = D / 255.0f; 
-        float val = D;
-
-        float result;
+    for (size_t i = 0; i < size; ++i) {
         
-        if (val > epsilon) {
-            
-            result = 1.0f;
+        float D = pG1[i] - (tau * pG2[i]);
+        
+        if (D >= epsilon) {
+            pOut[i] = 1.0f; 
         } 
         else {
-            
-            result = 1.0f + std::tanh(phi * (val - epsilon));
+            pOut[i] = 1.0f + std::tanh(phi * (D - epsilon));
         }
-
-        // 4. Scale back up to 0-255
-        output.data[i] = result * 255.0f;
+        
+        pOut[i] *= 255.0f;
     }
 
     return output;
 }
-
 
 Image convertToFloatImage(const FileManager& fm) {
     
@@ -150,35 +169,40 @@ Image convertToFloatImage(const FileManager& fm) {
     std::vector<unsigned char> raw = fm.getImageData();
     
     Image img(w, h);
+    size_t size = w * h;
+    const unsigned char* pRaw = raw.data();
+    float* pImg = img.data.data();
 
-    for (int i = 0; i < w * h; ++i) {
-
-        if (c == 1) {
-            img.data[i] = static_cast<float>(raw[i]);
-        } 
-        else if (c >= 3) {
-            int r = raw[i * c + 0];
-            int g = raw[i * c + 1];
-            int b = raw[i * c + 2];
-            img.data[i] = 0.299f * r + 0.587f * g + 0.114f * b;
+    if (c == 1) {
+        for (size_t i = 0; i < size; ++i) {
+            pImg[i] = static_cast<float>(pRaw[i]);
+        }
+    } 
+    else if (c >= 3) {
+        for (size_t i = 0; i < size; ++i) {
+            int idx = i * c;
+            pImg[i] = 0.299f * pRaw[idx] + 0.587f * pRaw[idx+1] + 0.114f * pRaw[idx+2];
         }
     }
-
+    
     return img;
 }
 
 FileManager convertToFMImage(const Image& img) {
-    
     std::vector<unsigned char> bytes(img.width * img.height);
+    size_t size = img.data.size();
     
-    for (size_t i = 0; i < img.data.size(); ++i) {
-        float val = img.data[i];
-    
-        if (val < 0.0f) val = 0.0f;
+    const float* pData = img.data.data();
+    unsigned char* pBytes = bytes.data();
 
-        if (val > 255.0f) val = 255.0f;
+    for (size_t i = 0; i < size; ++i) {
         
-        bytes[i] = static_cast<unsigned char>(val);
+        float val = pData[i];
+        
+        if (val < 0.0f) val = 0.0f;
+        else if (val > 255.0f) val = 255.0f;
+        
+        pBytes[i] = static_cast<unsigned char>(val);
     }
 
     return FileManager(bytes.data(), img.width, img.height, 1);

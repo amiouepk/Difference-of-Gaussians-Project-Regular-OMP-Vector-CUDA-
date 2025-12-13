@@ -1,14 +1,10 @@
 #ifndef SEQ_DIFF_GAUSS_H
 #define SEQ_DIFF_GAUSS_H
 
-#include <cstdint>
-#include <cmath>
 #include <vector>
-#include <complex>
-#include <iostream>
-#include <fstream>
-#include <webp/encode.h>
-#include "file_manager.h"
+#include <cmath>
+#include <algorithm>
+#include "file_manager.h" 
 
 struct Image {
     int width;
@@ -16,23 +12,23 @@ struct Image {
     std::vector<float> data; 
 
     Image(int w, int h) : width(w), height(h), data(w * h) {}
+    
+    void resize(int w, int h) {
+        width = w;
+        height = h;
+        if (data.size() != static_cast<size_t>(w * h)) {
+            data.resize(w * h);
+        }
+    }
 };
 
-std::vector<float> create1dGaussianKernel(float sigma);
-
-void convolve_x(const Image& input, Image& output, const std::vector<float>& kernel);
-
-void convolve_y(const Image& input, Image& output, const std::vector<float>& kernel);
-
-Image GaussianBlur(const Image& input, float sigma);
+// Internal helper for buffer reuse
+void GaussianBlurRaw(const Image& input, Image& output, Image& tempBuffer, float sigma);
 
 Image applyDoG(const Image& input, float sigma, float k, float tau);
-
 Image applyXDoG(const Image& input, float sigma, float k, float tau, float epsilon, float phi);
 
 Image convertToFloatImage(const FileManager& fm);
-
 FileManager convertToFMImage(const Image& img);
-
 
 #endif
