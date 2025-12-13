@@ -118,13 +118,14 @@ Image applyXDoG(const Image& input, float sigma, float k, float tau, float epsil
     for (size_t i = 0; i < input.data.size(); ++i) {
 
         float D = g1.data[i] - (tau * g2.data[i]);
+        // D = (1 - tau)*g1.data[i] + tau*D;
 
-
-        float val = D / 255.0f; 
+        // float val = D / 255.0f; 
+        float val = D;
 
         float result;
         
-        if (val < epsilon) {
+        if (val > epsilon) {
             
             result = 1.0f;
         } 

@@ -85,6 +85,75 @@ std::vector<std::vector<int>> load2DArray(const std::string& filename) {
     return grid;
 }
 
+void XDogProcess(std::string flags[], float sigma=1.0f, float k=20.0f, float tau=1.0f, float epsilon=100.0f, float phi=0.02f){
+    FileManager inputImage(flags[2], "image");
+    if (!inputImage.isValid()) {
+        std::cerr << "Error: Failed to load input image.\n";
+        exit(-1);
+    }
+    std::cout << "Loaded input image: " << inputImage.getFilename() << "\n";
+    std::cout << "Applying XDoG filter...\n";
+    Image floatImage = convertToFloatImage(inputImage);
+    Image dog = applyXDoG(floatImage, sigma, k, tau, epsilon, phi);
+    FileManager outputImage = convertToFMImage(dog);
+    outputImage.setFilename("dog_" + inputImage.getFilename());
+
+    if (!outputImage.saveImage(flags[4])) {
+        std::cerr << "Error: Failed to save output image to " << flags[4] << "\n";
+        exit(-1);
+    }
+    std::cout << "Saved output image: " << outputImage.getFilename() << "\n";
+}
+
+void genRangeXDog(std::string flags[]){
+    FileManager inputImage(flags[2], "image");
+    if (!inputImage.isValid()) {
+        std::cerr << "Error: Failed to load input image.\n";
+        exit(-1);
+    }
+    Image floatImage = convertToFloatImage(inputImage);
+
+    #pragma omp parallel for collapse(4)
+    for(int k = 15; k <= 20; k += 2){
+        for(int tau = 100; tau <= 120; tau += 5){
+            for (int phi = 20; phi <= 50; phi += 5){
+                for(int epsilon = 50; epsilon <= 100; epsilon += 10){
+                    Image dog = applyXDoG(floatImage, 1.0f, (float)k, tau/100.0f, (float)epsilon, phi/1000.0f);
+                    // Save output image
+                    FileManager outputImage = convertToFMImage(dog);
+
+                    outputImage.setFilename("dog_e" + std::to_string(epsilon) + "_p" + std::to_string(phi) + "_k" + std::to_string(k) + "_t" + std::to_string(tau) + "_" + inputImage.getFilename());
+                    // std::string outputPath = "dog_e" + std::to_string(epsilon) + "_p" + std::to_string(phi) + "_" + flags[4];
+                    if (!outputImage.saveImage(flags[4])) {
+                        std::cerr << "Error: Failed to save output image to " << flags[4] << "\n";
+                        // return -1;
+                    }
+                }
+            }
+        }
+    }
+}
+
+void saveBWImage(std::string flags[]){
+    // Placeholder for future implementation
+    FileManager inputImage(flags[2], "image");
+    if (!inputImage.isValid()) {
+        std::cerr << "Error: Failed to load input image.\n";
+        exit(-1);
+    }
+    printf("Converting image to black and white...\n");
+    if (!inputImage.toBWImage()) {
+        std::cerr << "Error: Failed to convert image to black and white.\n";
+        exit(-1);
+    }
+    inputImage.setFilename("bw_" + inputImage.getFilename());
+    // Save black and white image
+    if (!inputImage.saveImage(flags[4])) {
+        std::cerr << "Error: Failed to save black and white image.\n";
+        exit(-1);
+    }
+}
+
 int main(int argc, char* argv[]) {
     std::string programName = argv[0];
 
@@ -102,94 +171,11 @@ int main(int argc, char* argv[]) {
     getUserInput( argc, argv, flags);
 
 
-    // Testing file manager
-    FileManager inputImage(flags[2], "image");
-    if (!inputImage.isValid()) {
-        std::cerr << "Error: Failed to load input image.\n";
-        return -1;
-    }
-    std::cout << "Loaded image: " << flags[2] << " (" 
-              << inputImage.getWidth() << "x" << inputImage.getHeight() 
-              << ", " << inputImage.getChannels() << " channels)\n";
+    // saveBWImage(flags);
+
     
-    // Convert to black and white
-    printf("Converting image to black and white...\n");
-    if (!inputImage.toBWImage()) {
-        std::cerr << "Error: Failed to convert image to black and white.\n";
-        return -1;
-    }
 
-    // Convert to float image
-    Image floatImage = convertToFloatImage(inputImage);
-
-    // Apply Gaussian blur
-    // Image blurred = GaussianBlur(floatImage, 10.0f);
-
-    // Apply DoG
-    // 1. Include OpenMP header
-
-
-// ... inside your function ...
-
-// 2. Use 'parallel for' with 'collapse(3)'
-// 'collapse(3)' flattens the 3 nested loops into one giant task list
-// so OpenMP can distribute the work evenly across all cores.
-
-/*
-    #pragma omp parallel for collapse(3)
-    for(int s = 1; s <= 1; ++s) {
-        for(int k_step = 0; k_step <= 20; ++k_step) { // 0 to 6 covers 1.0 to 4.0 in 0.5 steps
-            for(int t_step = 10; t_step <= 10; ++t_step) { // 1 to 20 covers 0.1 to 2.0
-            
-                // 3. Convert Integers back to Floats locally
-                float sigma = (float)s;
-                float k = 1.0f + (k_step * 0.5f);
-                float tau = t_step * 0.1f;
-
-                // 4. Your existing logic (Private to each thread automatically)
-                // 'dog' and 'outputImage' are declared INSIDE the loop, 
-                // so every thread gets its own safe copy.
-                Image dog = applyDoG(floatImage, sigma, k, tau);
-                
-                FileManager outputImage = convertToFMImage(dog);
-                
-                // Construct filename
-                std::string filename = "Xdog_" +
-                                        std::to_string(sigma) + "_" + 
-                                        std::to_string(k) + "_" + 
-                                        std::to_string(tau) + "_" + 
-                                        inputImage.getFilename();
-                
-                // Note: outputImage.setFilename is hypothetical based on your code context
-                // outputImage.setFilename(filename); 
-
-                // 5. Critical Section for I/O (Optional but Safer)
-                // File writing is slow and usually serialized by the OS anyway.
-                // If you see garbled error messages, wrap std::cerr in a critical block.
-                if (!outputImage.saveImage(flags[4] + "/" + filename)) {
-                    #pragma omp critical
-                    {
-                        std::cerr << "Error: Failed to save output image to " << flags[4] << "\n";
-                    }
-                }
-            }
-        }
-    }
-    */
-
-
-
-    Image dog = applyDoG(floatImage, 1.0f, 70.6f, 0.9f);
-
-
-    // // Save output image
-    FileManager outputImage = convertToFMImage(dog);
-    outputImage.setFilename("Xdog_" + inputImage.getFilename());
-
-    if (!outputImage.saveImage(flags[4])) {
-        std::cerr << "Error: Failed to save output image to " << flags[4] << "\n";
-        return -1;
-    }
+    XDogProcess(flags);
 
     return 0;
 }
