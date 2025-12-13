@@ -6,6 +6,7 @@
 #include "file_manager.h"
 #include "seq_diff_gauss.hpp"
 #include <omp.h> 
+#include "cuda_diff_gauss.cuh"
 
 void printUsage(const std::string& programName) {
     std::cout   << "Usage: " << programName << " [options]\n"
@@ -105,6 +106,41 @@ void XDogProcess(std::string flags[], float sigma=1.0f, float k=20.0f, float tau
     std::cout << "Saved output image: " << outputImage.getFilename() << "\n";
 }
 
+void cudaXdogProcess(std::string flags[], float sigma=1.0f, float k=20.0f, float tau=1.0f, float epsilon=100.0f, float phi=0.02f){
+    FileManager inputImage(flags[2], "image");
+    if (!inputImage.isValid()) {
+        std::cerr << "Error: Failed to load input image.\n";
+        exit(-1);
+    }
+    std::cout << "Loaded input image: " << inputImage.getFilename() << "\n"; // Input is NOT a pointer, so (.) is fine.
+    std::cout << "Applying XDoG filter using GPU...\n";
+
+    // Returns a pointer (Address in memory)
+    FileManager* outputImage = applyXDoG_CUDA(inputImage, sigma, k, tau, epsilon, phi);
+
+    // FIX 1: Check if null before using
+    if (outputImage == nullptr) {
+        std::cerr << "CUDA Error: Output is null.\n";
+        return;
+    }
+
+    // FIX 2: Use Arrow (->) for pointers
+    outputImage->setFilename("cuda_dog_" + inputImage.getFilename());
+
+    // FIX 2: Use Arrow (->) here too
+    if (!outputImage->saveImage(flags[4])) {
+        std::cerr << "Error: Failed to save output image to " << flags[4] << "\n";
+        delete outputImage; // Clean up before exiting
+        exit(-1);
+    }
+    
+    // FIX 2: Use Arrow (->)
+    std::cout << "Saved output image: " << outputImage->getFilename() << "\n";
+
+    // FIX 3: Delete the pointer to free memory!
+    delete outputImage;
+}
+
 void genRangeXDog(std::string flags[]){
     FileManager inputImage(flags[2], "image");
     if (!inputImage.isValid()) {
@@ -127,6 +163,62 @@ void genRangeXDog(std::string flags[]){
                     if (!outputImage.saveImage(flags[4])) {
                         std::cerr << "Error: Failed to save output image to " << flags[4] << "\n";
                         // return -1;
+                    }
+                }
+            }
+        }
+    }
+}
+
+void genRangeXDog_CUDA(std::string flags[]){
+    FileManager inputImage(flags[2], "image");
+    if (!inputImage.isValid()) {
+        std::cerr << "Error: Failed to load input image.\n";
+        exit(-1);
+    }
+    
+    // We don't need 'convertToFloatImage' anymore; the CUDA function handles that conversion.
+
+    // Remove OpenMP here. The GPU will handle the speed.
+    // If you have multiple GPUs, only then would OpenMP help here.
+    for(int k = 15; k <= 20; k += 2){
+        for(int tau = 100; tau <= 120; tau += 5){
+            for (int phi = 20; phi <= 50; phi += 5){
+                for(int epsilon = 50; epsilon <= 100; epsilon += 10){
+                    
+                    // 1. Calculate float params
+                    float f_sigma = 1.0f;
+                    float f_k = (float)k;
+                    float f_tau = tau / 100.0f;
+                    float f_epsilon = (float)epsilon;
+                    float f_phi = phi / 1000.0f;
+
+                    // 2. Call CUDA function (Returns pointer)
+                    FileManager* outputImage = applyXDoG_CUDA(inputImage, f_sigma, f_k, f_tau, f_epsilon, f_phi);
+
+                    if(outputImage != nullptr) {
+                        // 3. Construct Filename
+                        std::string filename = "dog_e" + std::to_string(epsilon) + 
+                                               "_p" + std::to_string(phi) + 
+                                               "_k" + std::to_string(k) + 
+                                               "_t" + std::to_string(tau) + "_" + 
+                                               inputImage.getFilename();
+                        
+                        outputImage->setFilename(filename);
+                        
+                        // 4. Combine Folder + Filename for saving
+                        // Assuming flags[4] is the folder name like "output_dir/"
+                        std::string fullPath = flags[4];
+                        // Ensure directory ends with separator if needed, or simply append if flags[4] is a prefix
+                        // Simple append:
+                        fullPath += "/" + filename; 
+
+                        if (!outputImage->saveImage(fullPath)) {
+                            std::cerr << "Error: Failed to save to " << fullPath << "\n";
+                        }
+
+                        // 5. IMPORTANT: Free memory
+                        delete outputImage;
                     }
                 }
             }
@@ -175,7 +267,8 @@ int main(int argc, char* argv[]) {
 
     
 
-    XDogProcess(flags);
+    // cudaXdogProcess(flags);
+    genRangeXDog_CUDA(flags);
 
     return 0;
 }
