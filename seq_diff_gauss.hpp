@@ -26,7 +26,7 @@ struct Image {
 void GaussianBlurRaw(const Image& input, Image& output, Image& tempBuffer, float sigma);
 
 Image applyDoG(const Image& input, float sigma, float k, float tau);
-Image applyXDoG(const Image& input, float sigma, float k, float tau, float epsilon, float phi);
+Image applyXDoG(const Image& input, float sigma, float k, float p, float epsilon, float phi);
 
 Image convertToFloatImage(const FileManager& fm);
 FileManager convertToFMImage(const Image& img);

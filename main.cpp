@@ -2,22 +2,38 @@
 #include <string>
 #include <sstream>
 #include <fstream>
+#include <vector>
 
 #include "file_manager.h"
 #include "seq_diff_gauss.hpp"
 #include <omp.h> 
 #include "cuda_diff_gauss.cuh"
 
+// Load parameters from text file
+bool loadShaderParams(const std::string& filename, std::vector<float>& params) {
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Error: Could not open shader file: " << filename << "\n";
+        return false;
+    }
+    float value;
+    while (file >> value) {
+        params.push_back(value);
+    }
+    return !params.empty();
+}
+
 void printUsage(const std::string& programName) {
     std::cout   << "Usage: " << programName << " [options]\n"
                 << "Options:\n"
                 << "  -h, --help       Show this help message and exit\n"
-                << "  --GPU, -g       Use GPU for processing\n"
+                << "  --GPU, -g        Use GPU for processing\n"
                 << "  --input <file>   Specify input file location\n"
                 << "  --output <file>  Specify output file location\n"
                 << "  --shader <file>  Specify shader file location\n";
 }
 
+// Standard argument parser
 void getUserInput(int argc, char* argv[], std::string* flags) {
     if (argc < 2) { 
         std::cerr << "Error: No input provided.\n";
@@ -28,247 +44,76 @@ void getUserInput(int argc, char* argv[], std::string* flags) {
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--GPU" || arg == "-g") {
-            flags[0] = 1;
+            flags[0] = "1"; // <--- ADD QUOTES HERE
         } else if (arg == "--input") {
-            flags[1] = 1;
+            flags[1] = "1"; // <--- ADD QUOTES HERE
             i++;
-            flags[2] = argv[i]; // Next argument is the input file
+            if (i < argc) flags[2] = argv[i];
         } else if (arg == "--output") {
-            flags[3] = 1;
+            flags[3] = "1"; // <--- ADD QUOTES HERE
             i++;
-            flags[4] = argv[i]; // Next argument is the output file
+            if (i < argc) flags[4] = argv[i];
         }
         else if (arg == "--shader"){
-            flags[5] = 1;
+            flags[5] = "1"; // <--- CRITICAL FIX: ADD QUOTES HERE
             i++;
-            flags[6] = argv[i]; // Next argument is the shader file
-        }
-        else {
-            std::cerr << "Error: Unknown option '" << arg << "'\n";
-            printUsage(argv[0]);
-            exit(-1);
+            if (i < argc) flags[6] = argv[i];
         }
     }
-    if (flags[1] == "0" || flags[3] == "0" || flags[5] == "0") {
-        std::cerr << "Error: Missing required options.\n";
+
+    if (flags[1] == "0" || flags[3] == "0") {
+        std::cerr << "Error: Missing required options (Input or Output).\n";
         printUsage(argv[0]);
         exit(-1);
     }
 }
 
-std::vector<std::vector<int>> load2DArray(const std::string& filename) {
-    std::vector<std::vector<int>> grid;
-    std::ifstream file(filename);
-
-    if (!file.is_open()) {
-        std::cerr << "Error opening file!" << std::endl;
-        return grid;
-    }
-
-    std::string line;
-    // 1. Read line by line
-    while (std::getline(file, line)) {
-        std::vector<int> row;
-        std::stringstream ss(line);
-        int value;
-
-        // 2. Read number by number from that line
-        while (ss >> value) {
-            row.push_back(value);
-        }
-
-        // Only add non-empty rows
-        if (!row.empty()) {
-            grid.push_back(row);
-        }
-    }
-
-    return grid;
-}
-
-void XDogProcess(std::string flags[], float sigma=1.0f, float k=20.0f, float tau=1.0f, float epsilon=100.0f, float phi=0.02f){
+void XDogProcess(std::string flags[], float sigma, float k, float p, float epsilon, float phi){
     FileManager inputImage(flags[2], "image");
     if (!inputImage.isValid()) {
         std::cerr << "Error: Failed to load input image.\n";
         exit(-1);
     }
-    std::cout << "Loaded input image: " << inputImage.getFilename() << "\n";
-    std::cout << "Applying XDoG filter...\n";
+    std::cout << "Loaded input: " << inputImage.getFilename() << "\n";
+    std::cout << "Running XDoG: Sigma=" << sigma << " K=" << k 
+              << " p=" << p << " Eps=" << epsilon << " Phi=" << phi << "\n";
+    
     Image floatImage = convertToFloatImage(inputImage);
-    Image dog = applyXDoG(floatImage, sigma, k, tau, epsilon, phi);
+    Image dog = applyXDoG(floatImage, sigma, k, p, epsilon, phi);
     FileManager outputImage = convertToFMImage(dog);
-    outputImage.setFilename("dog_" + inputImage.getFilename());
-
+    
+    outputImage.setFilename("xdog_" + inputImage.getFilename());
     if (!outputImage.saveImage(flags[4])) {
-        std::cerr << "Error: Failed to save output image to " << flags[4] << "\n";
+        std::cerr << "Error: Failed to save output image.\n";
         exit(-1);
     }
-    std::cout << "Saved output image: " << outputImage.getFilename() << "\n";
-}
-
-void cudaXdogProcess(std::string flags[], float sigma=1.0f, float k=20.0f, float tau=1.0f, float epsilon=100.0f, float phi=0.02f){
-    FileManager inputImage(flags[2], "image");
-    if (!inputImage.isValid()) {
-        std::cerr << "Error: Failed to load input image.\n";
-        exit(-1);
-    }
-    std::cout << "Loaded input image: " << inputImage.getFilename() << "\n"; // Input is NOT a pointer, so (.) is fine.
-    std::cout << "Applying XDoG filter using GPU...\n";
-
-    // Returns a pointer (Address in memory)
-    FileManager* outputImage = applyXDoG_CUDA(inputImage, sigma, k, tau, epsilon, phi);
-
-    // FIX 1: Check if null before using
-    if (outputImage == nullptr) {
-        std::cerr << "CUDA Error: Output is null.\n";
-        return;
-    }
-
-    // FIX 2: Use Arrow (->) for pointers
-    outputImage->setFilename("cuda_dog_" + inputImage.getFilename());
-
-    // FIX 2: Use Arrow (->) here too
-    if (!outputImage->saveImage(flags[4])) {
-        std::cerr << "Error: Failed to save output image to " << flags[4] << "\n";
-        delete outputImage; // Clean up before exiting
-        exit(-1);
-    }
-    
-    // FIX 2: Use Arrow (->)
-    std::cout << "Saved output image: " << outputImage->getFilename() << "\n";
-
-    // FIX 3: Delete the pointer to free memory!
-    delete outputImage;
-}
-
-void genRangeXDog(std::string flags[]){
-    FileManager inputImage(flags[2], "image");
-    if (!inputImage.isValid()) {
-        std::cerr << "Error: Failed to load input image.\n";
-        exit(-1);
-    }
-    Image floatImage = convertToFloatImage(inputImage);
-
-    #pragma omp parallel for collapse(4)
-    for(int k = 15; k <= 20; k += 2){
-        for(int tau = 100; tau <= 120; tau += 5){
-            for (int phi = 20; phi <= 50; phi += 5){
-                for(int epsilon = 50; epsilon <= 100; epsilon += 10){
-                    Image dog = applyXDoG(floatImage, 1.0f, (float)k, tau/100.0f, (float)epsilon, phi/1000.0f);
-                    // Save output image
-                    FileManager outputImage = convertToFMImage(dog);
-
-                    outputImage.setFilename("dog_e" + std::to_string(epsilon) + "_p" + std::to_string(phi) + "_k" + std::to_string(k) + "_t" + std::to_string(tau) + "_" + inputImage.getFilename());
-                    // std::string outputPath = "dog_e" + std::to_string(epsilon) + "_p" + std::to_string(phi) + "_" + flags[4];
-                    if (!outputImage.saveImage(flags[4])) {
-                        std::cerr << "Error: Failed to save output image to " << flags[4] << "\n";
-                        // return -1;
-                    }
-                }
-            }
-        }
-    }
-}
-
-void genRangeXDog_CUDA(std::string flags[]){
-    FileManager inputImage(flags[2], "image");
-    if (!inputImage.isValid()) {
-        std::cerr << "Error: Failed to load input image.\n";
-        exit(-1);
-    }
-    
-    // We don't need 'convertToFloatImage' anymore; the CUDA function handles that conversion.
-
-    // Remove OpenMP here. The GPU will handle the speed.
-    // If you have multiple GPUs, only then would OpenMP help here.
-    for(int k = 15; k <= 20; k += 2){
-        for(int tau = 100; tau <= 120; tau += 5){
-            for (int phi = 20; phi <= 50; phi += 5){
-                for(int epsilon = 50; epsilon <= 100; epsilon += 10){
-                    
-                    // 1. Calculate float params
-                    float f_sigma = 1.0f;
-                    float f_k = (float)k;
-                    float f_tau = tau / 100.0f;
-                    float f_epsilon = (float)epsilon;
-                    float f_phi = phi / 1000.0f;
-
-                    // 2. Call CUDA function (Returns pointer)
-                    FileManager* outputImage = applyXDoG_CUDA(inputImage, f_sigma, f_k, f_tau, f_epsilon, f_phi);
-
-                    if(outputImage != nullptr) {
-                        // 3. Construct Filename
-                        std::string filename = "dog_e" + std::to_string(epsilon) + 
-                                               "_p" + std::to_string(phi) + 
-                                               "_k" + std::to_string(k) + 
-                                               "_t" + std::to_string(tau) + "_" + 
-                                               inputImage.getFilename();
-                        
-                        outputImage->setFilename(filename);
-                        
-                        // 4. Combine Folder + Filename for saving
-                        // Assuming flags[4] is the folder name like "output_dir/"
-                        std::string fullPath = flags[4];
-                        // Ensure directory ends with separator if needed, or simply append if flags[4] is a prefix
-                        // Simple append:
-                        fullPath += "/" + filename; 
-
-                        if (!outputImage->saveImage(fullPath)) {
-                            std::cerr << "Error: Failed to save to " << fullPath << "\n";
-                        }
-
-                        // 5. IMPORTANT: Free memory
-                        delete outputImage;
-                    }
-                }
-            }
-        }
-    }
-}
-
-void saveBWImage(std::string flags[]){
-    // Placeholder for future implementation
-    FileManager inputImage(flags[2], "image");
-    if (!inputImage.isValid()) {
-        std::cerr << "Error: Failed to load input image.\n";
-        exit(-1);
-    }
-    printf("Converting image to black and white...\n");
-    if (!inputImage.toBWImage()) {
-        std::cerr << "Error: Failed to convert image to black and white.\n";
-        exit(-1);
-    }
-    inputImage.setFilename("bw_" + inputImage.getFilename());
-    // Save black and white image
-    if (!inputImage.saveImage(flags[4])) {
-        std::cerr << "Error: Failed to save black and white image.\n";
-        exit(-1);
-    }
+    std::cout << "Saved: " << flags[4] << "/" << outputImage.getFilename() << "\n";
 }
 
 int main(int argc, char* argv[]) {
-    std::string programName = argv[0];
+    std::string flags[7] = { "0", "0", "", "0", "", "0", "" };
+    getUserInput(argc, argv, flags);
 
-    // Check for help option
-    for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
-        if (arg == "-h" || arg == "--help") {
-            printUsage(programName);
-            return 0;
+    // DEFAULTS
+    float sigma = 1.0f;
+    float k_val = 1.6f;
+    float p     = 20.0f; // Sharpening strength (Tau in old code)
+    float eps   = 0.5f;  // Threshold (0.0 to 1.0 now)
+    float phi   = 10.0f; // Softness
+
+    // Check for shader file
+    if (flags[5] == "1") {
+        std::vector<float> params;
+        if (loadShaderParams(flags[6], params)) {
+            // Apply parameters in order if they exist in the file
+            if (params.size() > 0) sigma = params[0];
+            if (params.size() > 1) k_val = params[1];
+            if (params.size() > 2) p     = params[2];
+            if (params.size() > 3) eps   = params[3];
+            if (params.size() > 4) phi   = params[4];
         }
     }
 
-    // Get user input
-    std::string flags[7] = { "0", "0", "", "0", "", "0", "" };
-    getUserInput( argc, argv, flags);
-
-
-    // saveBWImage(flags);
-
-    
-
-    // cudaXdogProcess(flags);
-    genRangeXDog_CUDA(flags);
-
+    XDogProcess(flags, sigma, k_val, p, eps, phi);
     return 0;
 }
