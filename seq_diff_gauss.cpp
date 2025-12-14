@@ -95,19 +95,22 @@ Image applyXDoG(const Image& input, float sigma, float k, float p, float epsilon
 
     for (size_t i = 0; i < size; ++i) {
         float scaledDifference = (1.0f + p) * pG1[i] - p * pG2[i];
+        float val = scaledDifference / 255.0f * 100.0f; 
 
-        // --- FIX IS HERE ---
-        // Removed the "* 100.0f". Now 'val' is 0.0 to 1.0 (mostly).
-        // This makes epsilon=0.1 actually work.
-        float val = scaledDifference / 255.0f * 100.0f;
-        
+        float result;
         if (val >= epsilon) {
-            pOut[i] = 1.0f; 
+            result = 1.0f; 
         } else {
-            pOut[i] = 1.0f + std::tanh(phi * (val - epsilon));
+            result = 1.0f + std::tanh(phi * (val - epsilon));
         }
         
-        pOut[i] *= 255.0f;
+        // --- CHANGE HERE ---
+        // Invert the result to get "Black lines on White Background"
+        // Original: pOut[i] = result * 255.0f;
+        pOut[i] = 255.0f - (result * 255.0f);
+
+        if (pOut[i] < 0.0f) pOut[i] = 0.0f;
+        if (pOut[i] > 255.0f) pOut[i] = 255.0f;
     }
 
     return output;
