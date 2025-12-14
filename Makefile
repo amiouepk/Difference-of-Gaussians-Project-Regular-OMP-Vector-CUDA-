@@ -6,8 +6,9 @@ NVCC      ?= nvcc
 CUDA_PATH ?= /usr/local/cuda
 
 # 2. FLAGS
-# CXXFLAGS: Add -I for CUDA headers so main.cpp can find <cuda_runtime.h>
-CXXFLAGS  ?= -std=c++17 -march=native -O3 -Wall -Wextra -fopenmp -I$(CUDA_PATH)/include
+CXXFLAGS  ?= -std=c++17 -march=native -O3 -Wall -Wextra -fopenmp \
+             -mavx2 -mfma -ffast-math -ftree-vectorize \
+             -I$(CUDA_PATH)/include
 
 # LDFLAGS: Add -L and -l for linking the CUDA runtime library
 LDFLAGS   ?= -fopenmp -L$(CUDA_PATH)/lib64 -lcudart
@@ -40,16 +41,13 @@ debug: NVCCFLAGS += -g -G
 debug: $(TARGET)
 
 # 5. LINKING STEP
-# Links both C++ objects and CUDA objects into one executable
 $(TARGET): $(ALL_OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
 # 6. COMPILATION RULES
-# Rule for C++ files
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Rule for CUDA files (Compiles .cu to .o)
 %.o: %.cu
 	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
